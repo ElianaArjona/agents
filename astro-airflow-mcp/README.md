@@ -158,12 +158,35 @@ By default, the server connects to `http://localhost:8080` (Airflow default; als
 | `AIRFLOW_VERIFY_SSL` | Set to `false` to disable SSL certificate verification |
 | `AIRFLOW_CA_CERT` | Path to custom CA certificate bundle |
 | `AF_READ_ONLY` | Set to `true` to block all write operations |
+| `ASTRO_MCP_ALLOWED_TOOLS` | Comma-separated MCP tool names to expose; unset to expose all tools |
 
 Example with auth (Claude Code):
 
 ```bash
 claude mcp add airflow -e AIRFLOW_API_URL=https://your-airflow.example.com -e AIRFLOW_USERNAME=admin -e AIRFLOW_PASSWORD=admin -- uvx astro-airflow-mcp --transport stdio
 ```
+
+**Selecting MCP tools**
+
+Set `ASTRO_MCP_ALLOWED_TOOLS` in the environment of the process running the MCP server to expose only selected [tools](#available-tools). For example, to allow DAG and DAG-run inspection in a standalone HTTP server:
+
+```bash
+ASTRO_MCP_ALLOWED_TOOLS="list_dags,get_dag_details,list_dag_runs,get_dag_run" \
+  uvx astro-airflow-mcp --transport http
+```
+
+The server advertises only those tools through `tools/list`. Direct `tools/call` requests for excluded tools are rejected before the tool executes.
+
+- Unset the variable to keep the default behavior of exposing all tools.
+- Names are exact and case-sensitive. Surrounding whitespace and duplicate names are ignored; wildcards are not supported.
+- Empty values, empty entries (such as `list_dags,`), and unknown tool names cause an error and prevent MCP startup.
+- The allowlist applies to every client of that server. It does not select tools per user or Slack channel.
+
+For [Airflow plugin mode](#airflow-plugin-mode), set the variable on the Airflow API server (Airflow 3) or webserver (Airflow 2) processes that host the plugin. Setting it only on a remote MCP client or agent does not configure the server.
+
+The setting is read once when the server module is imported. After changing it, restart or redeploy all processes hosting that MCP endpoint, then refresh the client's tool discovery. Reconnecting a client alone does not reload the server's setting.
+
+The allowlist controls MCP tool entry points. Allowed tools retain their internal helper and adapter calls, including the multiple operations performed by consolidated tools. MCP resources and prompts remain available; for example, excluding `get_airflow_config` does not remove the `airflow://config` resource. Airflow token permissions and RBAC still govern access to the underlying API. `AF_READ_ONLY` remains a separate control that blocks write operations.
 
 ## Features
 
@@ -593,6 +616,7 @@ The package auto-registers as an Airflow plugin. No Dockerfile changes or config
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AF_READ_ONLY` | Recommended | `false` | Set to `true` to block all write operations (trigger, pause, clear, delete) at the MCP server level, regardless of token permissions |
+| `ASTRO_MCP_ALLOWED_TOOLS` | Optional | unset (all tools) | Expose only the listed MCP tools and reject calls to excluded tools; see [Configuration](#configuration). Restart the hosting processes after changes |
 | `FASTMCP_STATELESS_HTTP` | Standalone HTTP server only | `false` | Disables stateful sessions when running the MCP server standalone. Not used in plugin mode — the plugin always runs FastMCP in stateless HTTP mode so Claude Code works out of the box |
 | `AIRFLOW_API_URL` | Optional | auto-detected | Override the internal API URL. On AF2 the default includes any `webserver.base_url` path prefix (e.g. `http://localhost:8080/d<deployment-id>`) |
 
@@ -652,6 +676,7 @@ For open-source Airflow, the plugin inherits Airflow's native RBAC. A user with 
 | `--airflow-project-dir` | `AIRFLOW_PROJECT_DIR` | `$PWD` | Astro project directory for auto-discovering Airflow URL |
 | `--no-verify-ssl` | `AIRFLOW_VERIFY_SSL=false` | off | Disable SSL certificate verification |
 | `--ca-cert` | `AIRFLOW_CA_CERT` | `None` | Path to custom CA certificate bundle |
+| Environment only | `ASTRO_MCP_ALLOWED_TOOLS` | unset (all tools) | Comma-separated allowlist of MCP tool names; see [Configuration](#configuration) |
 
 **Airflow Connection (Environment Variables):**
 
