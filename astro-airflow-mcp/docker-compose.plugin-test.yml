@@ -1,0 +1,32 @@
+# Overlay for docker-compose.test.yml: installs the locally built wheel into the
+# Airflow containers so the MCP plugin runs in plugin mode.
+#
+# Usage:
+#   make build   # produces dist/*.whl, which the containers install at startup
+#   docker compose -f docker-compose.test.yml -f docker-compose.plugin-test.yml \
+#     --profile airflow3 up -d
+#
+# Edit ASTRO_MCP_ALLOWED_TOOLS below per scenario. Do NOT set it to an empty
+# string to mean "unset" — an empty value is a configuration error by design.
+# To test the unset scenario, comment the line out.
+
+services:
+  airflow3:
+    # fastmcp requires starlette>=1; Airflow 3.1.0's dependency set predates
+    # it, so plugin mode needs an Airflow release whose own fastapi already
+    # runs on starlette 1.x.
+    image: apache/airflow:3.3.2
+    environment:
+      _PIP_ADDITIONAL_REQUIREMENTS: /opt/airflow/dist/*.whl
+      AF_TELEMETRY_DISABLED: "1"
+      ASTRO_MCP_ALLOWED_TOOLS: "list_dags,get_dag_details"
+    volumes:
+      - ./dist:/opt/airflow/dist:ro
+
+  airflow2:
+    environment:
+      _PIP_ADDITIONAL_REQUIREMENTS: /opt/airflow/dist/*.whl
+      AF_TELEMETRY_DISABLED: "1"
+      ASTRO_MCP_ALLOWED_TOOLS: "list_dags,get_dag_details"
+    volumes:
+      - ./dist:/opt/airflow/dist:ro

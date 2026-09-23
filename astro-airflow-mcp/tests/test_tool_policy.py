@@ -111,15 +111,23 @@ def test_allowlist_filters_discovery_and_blocks_invocation(policy_server):
     blocked_call.assert_not_called()
 
 
-def test_unknown_names_are_rejected_before_changing_visibility(policy_server):
+def test_unknown_names_expose_no_tools(policy_server, caplog):
+    # A raise here would stop the Airflow API server in plugin mode, so
+    # unknown names must instead hide every tool and log the error.
     server, _ = policy_server
 
     async def run():
-        with pytest.raises(ValueError, match=r"Unknown tool names.*typo_a, typo_b"):
-            await apply_tool_allowlist(server, frozenset({"allowed", "typo_b", "typo_a"}))
-        assert {tool.name for tool in await server.list_tools()} == {"allowed", "blocked"}
+        await apply_tool_allowlist(server, frozenset({"allowed", "typo_b", "typo_a"}))
+        async with Client(server) as client:
+            assert await client.list_tools() == []
+            with pytest.raises(ToolError, match="allowed"):
+                await client.call_tool("allowed", {})
+            assert len(await client.list_resources()) == 1
+            assert {prompt.name for prompt in await client.list_prompts()} == {"blocked"}
 
     asyncio.run(run())
+    assert "Unknown tool names" in caplog.text
+    assert "typo_a, typo_b" in caplog.text
 
 
 def test_later_registered_tools_are_still_blocked(policy_server):
@@ -156,7 +164,8 @@ async def run():
          patch("astro_airflow_mcp.tools.admin._get_adapter") as admin_adapter:
         async with Client(mcp) as client:
             names = sorted(tool.name for tool in await client.list_tools())
-            await client.call_tool("list_dags", {})
+            if "list_dags" in names:
+                await client.call_tool("list_dags", {})
             if "get_variable" not in names:
                 result = await client.call_tool(
                     "get_variable", {"variable_key": "secret"}, raise_on_error=False
@@ -191,11 +200,12 @@ def test_real_server_reads_environment_at_startup(value):
         assert names == {"list_dags", "get_dag_details"}
 
 
-@pytest.mark.parametrize("value", ["list_dags,typo", "", "list_dags,"])
-def test_real_server_rejects_invalid_configuration(value):
+# Malformed values fail at import-time parsing, so the process never starts.
+# Parse-level variants are covered by test_empty_entries_are_rejected.
+def test_real_server_rejects_malformed_configuration():
     result = subprocess.run(
         [sys.executable, "-c", _SERVER_PROBE],
-        env={**os.environ, "AF_TELEMETRY_DISABLED": "1", "ASTRO_MCP_ALLOWED_TOOLS": value},
+        env={**os.environ, "AF_TELEMETRY_DISABLED": "1", "ASTRO_MCP_ALLOWED_TOOLS": ""},
         capture_output=True,
         text=True,
         timeout=30,
@@ -204,3 +214,23 @@ def test_real_server_rejects_invalid_configuration(value):
     assert result.returncode != 0
     assert "ASTRO_MCP_ALLOWED_TOOLS" in result.stderr
     assert result.stdout == ""
+
+
+# Unknown names surface at server startup, which in plugin mode belongs to the
+# Airflow API server. The server must come up with no tools instead of failing.
+def test_real_server_exposes_no_tools_for_unknown_names():
+    result = subprocess.run(
+        [sys.executable, "-c", _SERVER_PROBE],
+        env={
+            **os.environ,
+            "AF_TELEMETRY_DISABLED": "1",
+            "ASTRO_MCP_ALLOWED_TOOLS": "list_dags,typo",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == []
+    assert "Unknown tool names" in result.stderr

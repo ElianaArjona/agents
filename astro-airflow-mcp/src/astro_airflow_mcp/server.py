@@ -17,6 +17,7 @@ from fastmcp.server.middleware.logging import LoggingMiddleware
 
 from astro_airflow_mcp.adapter_manager import AdapterManager
 from astro_airflow_mcp.adapters import AirflowAdapter
+from astro_airflow_mcp.constants import ALLOWED_TOOLS_ENV_VAR
 from astro_airflow_mcp.logging import get_logger
 from astro_airflow_mcp.telemetry import TelemetryMiddleware
 from astro_airflow_mcp.tool_policy import apply_tool_allowlist, parse_allowed_tools
@@ -25,7 +26,7 @@ from astro_airflow_mcp.utils import wrap_list_response
 logger = get_logger(__name__)
 
 # Read once per process; changing the allowlist requires a server restart.
-_allowed_tools = parse_allowed_tools(os.getenv("ASTRO_MCP_ALLOWED_TOOLS"))
+_allowed_tools = parse_allowed_tools(os.getenv(ALLOWED_TOOLS_ENV_VAR))
 
 
 @asynccontextmanager

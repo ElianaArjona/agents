@@ -179,14 +179,17 @@ The server advertises only those tools through `tools/list`. Direct `tools/call`
 
 - Unset the variable to keep the default behavior of exposing all tools.
 - Names are exact and case-sensitive. Surrounding whitespace and duplicate names are ignored; wildcards are not supported.
-- Empty values, empty entries (such as `list_dags,`), and unknown tool names cause an error and prevent MCP startup.
+- Empty values and empty entries (such as `list_dags,`) are configuration errors: the MCP server does not start. In standalone mode the process exits with the error. In plugin mode, Airflow logs the error and continues without the MCP plugin; the rest of Airflow is unaffected.
+- Unknown tool names do not stop the server: it starts, exposes no tools, and logs an error that names the wrong entries and the registered tools. Fix the value and restart.
 - The allowlist applies to every client of that server. It does not select tools per user or Slack channel.
 
 For [Airflow plugin mode](#airflow-plugin-mode), set the variable on the Airflow API server (Airflow 3) or webserver (Airflow 2) processes that host the plugin. Setting it only on a remote MCP client or agent does not configure the server.
 
 The setting is read once when the server module is imported. After changing it, restart or redeploy all processes hosting that MCP endpoint, then refresh the client's tool discovery. Reconnecting a client alone does not reload the server's setting.
 
-The allowlist controls MCP tool entry points. Allowed tools retain their internal helper and adapter calls, including the multiple operations performed by consolidated tools. MCP resources and prompts remain available; for example, excluding `get_airflow_config` does not remove the `airflow://config` resource. Airflow token permissions and RBAC still govern access to the underlying API. `AF_READ_ONLY` remains a separate control that blocks write operations.
+To confirm the result, check the server logs after the restart. A `Tool allowlist active: exposing N of M tools` line means the policy applied. An `Unknown tool names` error line means the server is running but exposes no tools. A traceback naming `ASTRO_MCP_ALLOWED_TOOLS` means the value is malformed and the MCP server did not start. None of these lines means the variable is unset and all tools are exposed.
+
+The allowlist limits which tools a client can call. It does not restrict the arguments of an allowed tool, and an allowed tool still performs every operation its implementation contains. MCP resources and prompts stay available: excluding `get_airflow_config` does not remove the `airflow://config` resource. Airflow permissions and `AF_READ_ONLY` apply independently.
 
 ## Features
 
@@ -676,7 +679,6 @@ For open-source Airflow, the plugin inherits Airflow's native RBAC. A user with 
 | `--airflow-project-dir` | `AIRFLOW_PROJECT_DIR` | `$PWD` | Astro project directory for auto-discovering Airflow URL |
 | `--no-verify-ssl` | `AIRFLOW_VERIFY_SSL=false` | off | Disable SSL certificate verification |
 | `--ca-cert` | `AIRFLOW_CA_CERT` | `None` | Path to custom CA certificate bundle |
-| Environment only | `ASTRO_MCP_ALLOWED_TOOLS` | unset (all tools) | Comma-separated allowlist of MCP tool names; see [Configuration](#configuration) |
 
 **Airflow Connection (Environment Variables):**
 
