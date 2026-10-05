@@ -13,10 +13,6 @@ from fastmcp.exceptions import ToolError
 from astro_airflow_mcp.tool_policy import apply_tool_allowlist, parse_allowed_tools
 
 
-def test_unset_allowlist_means_unrestricted():
-    assert parse_allowed_tools(None) is None
-
-
 def test_single_tool():
     assert parse_allowed_tools("list_dags") == frozenset({"list_dags"})
 

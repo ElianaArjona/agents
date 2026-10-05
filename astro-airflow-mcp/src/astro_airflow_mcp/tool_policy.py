@@ -11,19 +11,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def parse_allowed_tools(value: str | None) -> frozenset[str] | None:
+def parse_allowed_tools(value: str) -> frozenset[str]:
     """Parse the comma-separated ASTRO_MCP_ALLOWED_TOOLS setting.
 
-    An unset value means no restriction. An explicitly empty value or an empty
-    entry is a configuration error, never a fallback to unrestricted access.
-    Names are case-sensitive; whitespace and duplicate names are ignored.
+    An empty value or an empty entry is a configuration error, never a
+    fallback to unrestricted access. Names are case-sensitive; whitespace and
+    duplicate names are ignored.
 
     This only validates the list format. Tool names must also be checked against
     the server's registered tools before applying the policy.
     """
-    if value is None:
-        return None
-
     names = [name.strip() for name in value.split(",")]
     if any(not name for name in names):
         raise ValueError(
