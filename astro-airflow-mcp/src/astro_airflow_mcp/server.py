@@ -20,19 +20,16 @@ from astro_airflow_mcp.adapters import AirflowAdapter
 from astro_airflow_mcp.constants import ALLOWED_TOOLS_ENV_VAR
 from astro_airflow_mcp.logging import get_logger
 from astro_airflow_mcp.telemetry import TelemetryMiddleware
-from astro_airflow_mcp.tool_policy import apply_tool_allowlist, parse_allowed_tools
+from astro_airflow_mcp.tool_policy import apply_tool_allowlist
 from astro_airflow_mcp.utils import wrap_list_response
 
 logger = get_logger(__name__)
-
-# Read once per process; changing the allowlist requires a server restart.
-_allowed_tools = parse_allowed_tools(os.getenv(ALLOWED_TOOLS_ENV_VAR))
 
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP) -> AsyncIterator[None]:
     """Apply the tool policy after registration and before accepting requests."""
-    await apply_tool_allowlist(server, _allowed_tools)
+    await apply_tool_allowlist(server, os.getenv(ALLOWED_TOOLS_ENV_VAR))
     yield
 
 

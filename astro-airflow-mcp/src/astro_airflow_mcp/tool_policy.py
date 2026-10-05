@@ -34,18 +34,26 @@ def parse_allowed_tools(value: str | None) -> frozenset[str] | None:
     return frozenset(names)
 
 
-async def apply_tool_allowlist(server: "FastMCP", allowed_tools: frozenset[str] | None) -> None:
-    """Apply a static tool allowlist before serving requests.
+async def apply_tool_allowlist(server: "FastMCP", value: str | None) -> None:
+    """Apply the allowlist setting (the raw env value) before serving requests.
 
     FastMCP visibility controls filter both discovery and invocation. Resources
     and prompts are unaffected. Call after tools have been registered.
 
-    Unknown tool names never raise: in plugin mode this code runs inside the
+    Configuration errors never raise: in plugin mode this code runs inside the
     Airflow API server's startup, where an exception stops the whole server,
-    not just MCP. Instead the server exposes no tools and logs the error, so
-    the failure stays scoped to MCP and remains fail-closed.
+    not just MCP. A malformed value and an unknown tool name both leave the
+    server running with no tools and log the error, so the failure stays
+    scoped to MCP and remains fail-closed.
     """
-    if allowed_tools is None:
+    if value is None:
+        return
+
+    try:
+        allowed_tools = parse_allowed_tools(value)
+    except ValueError as exc:
+        server.disable(components={"tool"})
+        logger.error("%s Exposing no tools until the value is fixed and the server restarts.", exc)
         return
 
     registered_tools = {tool.name for tool in await server.list_tools(run_middleware=False)}

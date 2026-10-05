@@ -179,15 +179,16 @@ The server advertises only those tools through `tools/list`. Direct `tools/call`
 
 - Unset the variable to keep the default behavior of exposing all tools.
 - Names are exact and case-sensitive. Surrounding whitespace and duplicate names are ignored; wildcards are not supported.
-- Empty values and empty entries (such as `list_dags,`) are configuration errors: the MCP server does not start. In standalone mode the process exits with the error. In plugin mode, Airflow logs the error and continues without the MCP plugin; the rest of Airflow is unaffected.
-- Unknown tool names do not stop the server: it starts, exposes no tools, and logs an error that names the wrong entries and the registered tools. Fix the value and restart.
+- Configuration errors do not stop the server. An empty value, an empty entry (such as `list_dags,`), or an unknown tool name makes the server start, expose no tools, and log an error that describes the problem. Fix the value and restart. A configuration error never falls back to exposing all tools.
 - The allowlist applies to every client of that server. It does not select tools per user or Slack channel.
 
 For [Airflow plugin mode](#airflow-plugin-mode), set the variable on the Airflow API server (Airflow 3) or webserver (Airflow 2) processes that host the plugin. Setting it only on a remote MCP client or agent does not configure the server.
 
-The setting is read once when the server module is imported. After changing it, restart or redeploy all processes hosting that MCP endpoint, then refresh the client's tool discovery. Reconnecting a client alone does not reload the server's setting.
+The setting is read once, when the server starts. After changing it, restart or redeploy all processes hosting that MCP endpoint, then refresh the client's tool discovery. Reconnecting a client alone does not reload the server's setting.
 
-To confirm the result, check the server logs after the restart. A `Tool allowlist active: exposing N of M tools` line means the policy applied. An `Unknown tool names` error line means the server is running but exposes no tools. A traceback naming `ASTRO_MCP_ALLOWED_TOOLS` means the value is malformed and the MCP server did not start. None of these lines means the variable is unset and all tools are exposed.
+To confirm the result, check the server logs after the restart. A `Tool allowlist active: exposing N of M tools` line means the policy applied. An error line naming `ASTRO_MCP_ALLOWED_TOOLS` means the server is running but exposes no tools; the line says what to fix. Neither line means the variable is unset and all tools are exposed.
+
+On Airflow 2 plugin mode, the webserver starts the MCP server when the first request reaches `/mcp/v1/`, separately in each webserver worker. These lines therefore appear after the first MCP request, not at restart. Send one MCP request (for example, connect a client and list tools) before you read the logs.
 
 The allowlist limits which tools a client can call. It does not restrict the arguments of an allowed tool, and an allowed tool still performs every operation its implementation contains. MCP resources and prompts stay available: excluding `get_airflow_config` does not remove the `airflow://config` resource. Airflow permissions and `AF_READ_ONLY` apply independently.
 
